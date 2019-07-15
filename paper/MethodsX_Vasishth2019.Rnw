@@ -1,0 +1,465 @@
+\documentclass[man,floatsintext]{apa6}
+
+\usepackage{hyperref}
+
+\usepackage[american]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[backend=biber,useprefix=true,style=apa,url=false,doi=false,sorting=none,eprint=false]{biblatex}
+
+\usepackage{fancyvrb}
+
+%\usepackage{newfloat}
+%\DeclareFloatingEnvironment[
+%    fileext=los,
+%    listname=List of Schemes,
+%    name=Fig.,
+%    placement=!htbp,
+%    within=section,
+%]{fig}
+
+\usepackage{lscape} % landscape table
+\usepackage{longtable}
+\usepackage{threeparttablex}
+\usepackage{booktabs}
+\usepackage{multirow} % multirows in tables 
+\usepackage{bigdelim} % curly braces in table
+\usepackage{xcolor,colortbl}
+
+\usepackage{mathtools}
+\makeatletter
+ 
+\newcommand{\explain}[2]{\underset{\mathclap{\overset{\uparrow}{#2}}}{#1}}
+\newcommand{\explainup}[2]{\overset{\mathclap{\underset{\downarrow}{#2}}}{#1}}
+ 
+\makeatother
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\newtheorem{definition}{Definition}[section]
+
+\usepackage{microtype}
+\usepackage[american]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage{csquotes}
+\usepackage{setspace}
+\usepackage{geometry}
+%\usepackage{lineno,clipboard}
+%\newclipboard{reviews}
+%\openclipboard{reviews}
+
+
+\usepackage[ruled,vlined]{algorithm2e}
+%\usepackage[linesnumbered,lined,boxed,commentsnumbered]{algorithm2e}
+
+\usepackage[most]{tcolorbox}
+
+%\newcommand{\revised}[1]{{\color{black}{#1}}}
+
+%\usepackage{tikz}
+
+\usepackage{gb4e}
+
+\newcommand{\cmark}{\ding{51}}%
+\newcommand{\xmark}{\ding{55}}%
+\newcommand{\R}{\textsf{R}}
+\newcommand{\actrcue}[1]{\texttt{\uppercase{#1}}}
+% \newcommand{\match}[1]{$+$\texttt{#1}}
+\newcommand{\match}[1]{\texttt{+\uppercase{#1}}}
+% \newcommand{\mismatch}[1]{$-$\texttt{\uppercase{#1}}}
+\newcommand{\mismatch}[1]{\texttt{-\uppercase{#1}}}
+\newcommand{\featureset}[2]{$\{^{\texttt{\uppercase{#1}}}_{\texttt{\uppercase{#2}}}\}$}
+\newcommand{\featuresetNP}[2]{$^{\texttt{\uppercase{#1}}}_{\texttt{\uppercase{#2}}}$}
+\mathchardef\mhyphen="2D % Define a "math hyphen"
+\newcommand\ccom{\mathop{c\mhyphen com}}
+% \newcommand{\ignore}[1]{}
+\newcommand{\me}{\mathrm{e}}
+\newcommand{\TODO}[1]{{\color{red}{#1}}}
+\newcommand{\revised}[1]{#1}
+\newcommand{\revisedII}[1]{#1}
+\newcommand{\revisedIII}[1]{{\color{red}{#1}}}
+\newcommand{\revFE}[1]{{\color{red}{#1}}}
+\newcommand{\revSV}[1]{{\color{red}{#1}}}
+\newcommand{\revIV}[1]{{\color{red}{#1}}}
+\newcommand{\revV}[1]{{\color{blue}{#1}}}
+\newcommand{\exitem}{\refstepcounter{example}\item[(\arabic{example})]}
+\newcounter{example}
+
+
+\DeclareLanguageMapping{american}{american-apa}
+\addbibresource{cuesimmethods.bib}
+
+
+\leftheader{Vasishth}
+\title{Using Approximate Bayesian Computation for estimating parameters in the cue-based retrieval model of sentence processing}
+\shorttitle{Using ABC for parameter estimation}
+
+\author{Shravan Vasishth}
+
+
+\affiliation{Department of Linguistics, University of Potsdam, Potsdam, Germany}
+
+\authornote{Correspondence: vasishth@uni-potsdam.de.}
+\note{\today}
+
+\journal{MethodsX} 
+\volume{} 
+
+\keywords{Approximate Bayesian Computation; Bayesian parameter estimation; prior and posterior predictive checks; cue-based retrieval; sentence processing}
+
+\abstract{In this methods paper, we explain how prior and posterior predictive distributions of reading times are generated from the cue-based retrieval of Lewis \& Vasishth, 2005. Prior predictive distributions of reading time are generated from the model by defining a mildly informative prior on the parameter of interest (here, the latency factor). The posterior predictive distribution involves two steps: first, Approximate Bayesian Computation (ABC) is used with rejection sampling to compute the posterior distribution of the parameter of interest. This posterior distribution is then used to generated a posterior predictive distribution of reading times and of the effects predicted by the model. The ABC method of parameter estimation is superior to conventionally used approaches such as grid search, because model predictions take into account the uncertainty of the parameter value.} 
+
+\begin{document}
+
+\maketitle
+
+<<setup,include=FALSE,cache=FALSE,echo=FALSE>>=
+library(MASS)
+library(knitr)
+library(xtable)
+library(papaja)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+#library(sjPlot)
+library(rstan)
+library(brms)
+library(gridExtra)
+library(bayesplot)
+library(ggridges)
+library(lme4)
+library(reshape2)
+
+theme_set(theme_apa())
+
+# set global chunk options, put figures into folder
+options(warn=-1, replace.assign=TRUE)
+opts_chunk$set(fig.path='figures/figure-', fig.align='center', fig.show='hold')
+options(replace.assign=TRUE,width=75)
+opts_chunk$set(dev='postscript')
+opts_chunk$set(echo = TRUE)
+
+## some helper functions:
+rmsd <- function (obs, pred) {
+	sqrt(mean((obs - pred)^2, na.rm = TRUE))
+}
+
+compute_int_means <- function(d){
+	int <- select(filter(d, Distractor=="Match"), -Condition, -Distractor)
+	dim(int)
+	int$int <- filter(d, Distractor=="Match")$latency - filter(d, Distractor=="Mismatch")$latency
+	#
+	# means <- group_by(int, Set, Target, lf, ans, mas, mp, rth, bll, lp, ldp, blc, dbl, ndistr) %>% summarise(Effect=mean(int), SE=sd(int)/sqrt(length(int))) %>% ungroup() %>% mutate(lower=Effect-SE, upper=Effect+SE)
+	# means
+	means <- group_by(int, Set, Target, lf, ans, mas, mp, rth, bll, psc, pic, qcf, qco, cuesim, tprom, dprom, lp, ldp, blc, dbl, ndistr, cueweighting) %>% summarise(Effect=mean(int), SE=sd(int)/sqrt(length(int)), Sji_neg=sum(Sji_neg)) %>% ungroup() %>% mutate(lower=Effect-SE, upper=Effect+SE)
+	means
+}
+
+convert2log <- function(x){
+	ifelse(x>=1, log(x), ifelse(x<=-1, -log(abs(x)), 0))
+}
+
+convert2log10 <- function(x){
+	x <- ifelse(x>-1 & x<1, 0, x)
+	x <- ifelse(x<=-1, -log10(abs(x)), x) 
+	x <- ifelse(x>=1, log10(abs(x)), x)
+}
+
+@
+
+\section{Introduction}
+
+This paper explains the method used in \textcite{JaegerMertzenVanDykeVasishth2019} to estimate  the latency factor parameter in the cue-based retrieval model of \textcite{EngelmannJaegerVasishth2019}, when evaluating the model's predictions to the observed data from \textcite{Dillon2013} and our larger-sample replication attempt \parencite{JaegerMertzenVanDykeVasishth2019}. The source code and data associated with the methods reported here and the paper by \textcite{JaegerMertzenVanDykeVasishth2019} are available from https://osf.io/reavs/.
+
+\section{The cue-based retrieval model of Engelmann, Jäger, and Vasishth, 2019}
+
+This model is a simplified version of the Lisp-based model described in \textcite{LewisVasishth2005}. This simplified version is written in R and abstracts away from the individual incremental parsing steps of the original model, and focuses instead only on the retrieval time and retrieval accuracy computations, given some retrieval cues and candidate chunks in memory that could match the retrieval cues. 
+
+Table~\ref{tbl:params} shows the parameter values used in the recent large-sample evaluation (approximately 100 published reading experiments) of the cue-based retrieval model described in \textcite{EngelmannJaegerVasishth2019}. Here, we follow the practice that was adopted in \textcite{LewisVasishth2005}, of holding all the parameters constant to their default value. The only exception is the latency factor parameter, which scales retrieval time to the millisecond reading time scale.  The reason for holding the parameters constant is to avoid overfitting to the particular data being considered. 
+
+\begin{table}[!htbp]
+	\caption{Model parameters, their default values, and the values used in the simulation of the studies discussed in Engelmann et al., 2019.}
+	\begin{center}
+	\begin{tabular}{llrc}
+	\hline
+	Parameter    & Name                                      & Default & Simulation \\
+	\hline
+	$F$          & latency factor                            & $0.2$ & $[0.1, 0.25]$\\
+	$f$          & latency exponent                          & $1$ & $1$ \\
+	$\tau$       & retrieval threshold                       & $-1.5$ & $-1.5$ \\ %-4.5
+	$d$          & decay rate                            & $0.5$ & $0.5$ \\
+	\textit{ANS} & activation noise                          & $0.2$ & $0.2$ \\
+	\textit{MAS} & maximum associative strength              & $1$ & $1.5$ \\ %2, 1.5
+	\textit{MP}  & mismatch penalty                          & $1$ & $0.25$ \\ %0, 0.25
+	% ga         & goal source activation                    & $1$ & \\
+	$\beta$      & base-level activation                       & $0$ & $0$ \\
+%	$t_{trgt}$   & time since since last target presentation & $1000$ & $\{700, 1300\}$\\
+%	$t_{dstr}$   & time since last distractor presentation   & $1000$ & $\{700, 1300\}$\\
+%	{}           &                                           & & \\
+ 	\hline
+	\end{tabular}
+	\end{center}
+	\label{tbl:params}
+\end{table}
+
+\section{Bayesian parameter estimation}
+
+Here, we provide some of the background needed to understand the parameter estimation approach described below. In the Bayesian modeling framework, given a vector of data $y$ and a vector of model parameters $\theta$ that have prior distributions $p(\theta)$ defined on them, a likelihood function for the data $p(y\mid \theta)$ and the priors allow us to compute the posterior distribution of the parameters given the data,  $p(\theta\mid y)$. This is possible because of Bayes' rule, which states that the posterior is proportional to the likelihood times the prior:
+
+\begin{equation}
+p(\theta\mid y ) \propto p(y\mid \theta)p(\theta)
+\end{equation}
+
+The posterior distributions of parameters are generally computed using Monte Carlo Markov Chain methods. Examples are Gibbs sampling, Metropolis-Hastings, and (more recently) Hamiltonian Monte Carlo.
+
+The likelihood and the priors together constitute the model, which we will call $\mathcal{M}$ hereafter. Given a particular model  $\mathcal{M}$, one important question is: what predictions does the model make? The model makes two kinds of predictions: a priori predictions, before any data have been taken into account; and a posteriori predictions, after the data have been taken into account.  The distributions of these two kinds of predictions are called \textit{prior predictive distributions}, and \textit{posterior predictive distributions}, respectively. 
+
+The prior predictive distribution can be computed by drawing random samples of the parameters $\tilde{\theta}$ from $p(\theta)$, and then using these values to simulate data $\tilde{y}$ from the likelihood $p(y\mid \tilde{\theta})$. 
+
+The posterior predictive distribution $p(y_{pred}\mid y)$ can be computed once we have the posterior distribution of the parameters, $p(\theta \mid y)$. Here, we assume that past and future observations are conditionally independent given $\theta$.
+
+\begin{equation}
+p(y_{pred}\mid y) = \int p(y_{pred} \mid \theta) p(\theta \mid y)\, d\theta
+\end{equation}
+
+An important point to note here is that we are conditioning $y_{pred}$ only on $y$. We do not condition on the unknown parameters $\theta$; we simply integrate these unknown parameters out. This allows us to take the uncertainty of the posterior distributions of the parameters into account, giving us more realistic estimates of the predictions from the model. Contrast this with a situation where we condition on, e.g.,  maximum likelihood estimates of the parameters; that is,  we condition on a point value, not taking the uncertainty of that estimate into account.
+
+\section{Approximate Bayesian Computation}
+
+
+
+Approximate Bayesian Computation (ABC) is a method for estimating posterior distributions of parameters in a model. ABC is useful when Bayes' rule cannot be employed to draw samples from the posterior distributions; this situation arises when the generative model cannot be easily expressed as a likelihood function. For extensive treatments of the theory and practical aspects of ABC, see \textcite{sisson2018handbook,palestro2018likelihood}.  The algorithm used here is rejection sampling; see Listing~\ref{alg:abcrejection} for pseudo-code describing the algorithm.
+
+\begin{algorithm}[H]
+\SetAlgoLined
+%\KwResult{Write here the result }
+\KwIn{Tolerance bounds $lower$ and $upper$ from data}
+\Begin{\For{$i$ in 1:N\_Simulations}{
+  Take one sample from prior $\pi(\theta)$\;
+  Generate predicted mean effect $\tilde{\bar{y}} \sim Model(\theta)$\;
+  \If{$lower \leq \tilde{\bar{y}} \leq upper$}{
+  $\hbox{Save } \theta \hbox{ value as sample from posterior}$\;
+  }
+  \Else{Discard $\theta$ sample\;
+  }
+}
+}
+\caption{ABC using rejection sampling. Shown is the case where we need to sample posterior values for a single parameter $\theta$. Each iteration of the  algorithm consists of drawing a single random sample from a prior distribution for the parameter (here, $Beta(2,6)$), and then generating the predicted mean effect from the model using that sampled parameter value. If the predicted mean effect is near the observed data (in our implementation, if the predicted effect lies within one standard error of the mean effect of interest), then accept the sampled parameter value; otherwise reject that sampled value. This process is repeated until we have sufficient samples from the posterior distribution of the parameter. These samples therefore constitute the posterior distribution of the parameter.} \label{alg:abcrejection}
+\end{algorithm}
+
+
+\section{Bayesian estimates of the latency factors}
+
+\subsection{Step 1: Define a prior for the parameter}
+
+We begin by defining a prior distribution on the latency factor in the cue-based retrieval model. Several priors can be considered: a Uniform prior or a Beta prior are examples. For illustration, we use the Beta(2,6) prior. As shown in Figure~\ref{fig:betaprior}, this is a relatively uninformative prior which downweights very small and very large values of the latency factor parameter.
+
+\begin{figure}[!htbp]
+\centering
+<<betaprior,echo=FALSE,eval=TRUE,fig.height=5>>=
+library(ggplot2)
+x_temp<-rbeta(1000000,2,6)
+latency_factor_prior<-data.frame(x_temp=x_temp)
+prior_lf<-ggplot(latency_factor_prior,aes(x=x_temp))+geom_histogram(aes(y=..density..),position="identity",fill="gray",binwidth=0.01)+theme_bw()+theme(strip.text.x = element_text(size = 16, colour = "black", angle = 0))+
+  xlab("latency factor")+
+  ggtitle("Prior on latency factor")+theme_bw()+
+  magnifytext(sze=12)
+prior_lf
+@
+\caption{A Beta(2,6) prior on the latency factor.}\label{fig:betaprior}
+\end{figure}
+
+
+<<priorpred,echo=FALSE,eval=FALSE>>=
+printcounts<-FALSE
+
+iterate_lf <- function(values,iterations=1000){
+  ## values is a scalar or vector containing an lf value or values.
+  ## iterations is the number of iterations for that given value.
+  ## We need multiple iterations as noise is non-zero and there will be some 
+  ## variability due to noise. 
+  maxset <- 0
+  means <- NULL
+  for(v in values){
+    lf <<- v
+    pmatr <- create_param_matrix(model_4cond, iterations) 
+    results <- run(pmatr)
+    means2 <- compute_int_means(results)
+    means2$Set <- means2$Set+maxset
+    means <- bind_rows(means, means2)
+  }
+  means
+}
+
+## set the parameters:
+reset_params()
+psc <<- 0
+qcf <<- 0
+cuesim <<- -1
+bll <<- 0.5
+## default in Engelmann et al 2019 Cog Sci paper
+mp <<- 0.15
+## default in Engelmann et al 2019 Cog Sci paper
+mas <<- 1.5 ## could change this to a random starting value: 
+            ## mas <- runif(1,min=1,max=2)
+            ## mas<<-sort(rnorm(50,mean=1.5,sd=0.25))
+# default in Engelmann et al 2019 Cog Sci paper
+ans <<- 0.2
+# default in Engelmann et al 2019 Cog Sci paper
+rth <<-  -1.5
+dbl <<- 0
+cueweighting <<- 1 
+
+nsim<-1000
+g_priorpredmeans<-u_priorpredmeans<-rep(NA,nsim)
+for(i in 1:nsim){
+  print(i)
+  latency_factor<-rbeta(1,2,6)
+  ## could estimate multiple parameters
+#  ans<<-rnorm(1,.25,0.01)
+#  mas<<-rnorm(1,mean=2.5,sd=.5)
+#  mp<<-rnorm(1,mean=1,sd=.25)
+#  rth<<-rnorm(1,mean=-1.5,sd=.25)
+  means<-iterate_lf(values=latency_factor)
+  g_priorpredmeans[i] <- means$Effect[1]
+  u_priorpredmeans[i] <- means$Effect[2]
+}
+@
+
+\subsubsection{The estimates from data for ungrammatical conditions}
+
+In the ungrammatical conditions of the \textcite{Dillon2013} data, the estimate of the interference effect in agreement conditions is -60 ms, Credible interval (CrI) [-112, -5] ms. Taking a normal approximation, this implies an effect coming from the distribution $Normal(-60,33^2)$.
+Similarly, the estimate of the interference effect in reflexive conditions is -18 ms, CrI [-72, 36] ms, which corresponds approximately to the $Normal(-18,27^2)$.
+
+We can use these normal approximations to define a lower and upper bound for the ABC algorithm: one standard deviation about the observed mean. The acceptance criterion of the ABC algorithm is that the predicted value generated by the model lies within one standard deviation of the sample mean from the data.
+
+<<dillonestimates,echo=FALSE>>=
+## our data from one subject in one pair of conditions (difference in means):
+xbar_au_d13<- -60
+## 1 SD above and below mean
+lower_au_d13 <- -93
+upper_au_d13 <- -27
+
+xbar_ru_d13<- -18
+## 1 SD above and below mean
+lower_ru_d13 <- -45
+upper_ru_d13 <- 9
+@
+
+In the \textcite{JaegerMertzenVanDykeVasishth2019} data, 
+the estimate of the interference effect in agreement conditions is -22 [-46, 3], which can be approximated by the  $Normal(-22,13^2)$. The estimate in reflexive conditions is -23 [-48, 2], which can be approximated as the  $Normal(-23,13^2)$.
+  
+<<dillonerepstimates,echo=FALSE>>=
+## our data from one subject in one pair of conditions (difference in means):
+xbar_au_d13rep<- -22
+## 1 SD above and below mean
+lower_au_d13rep <- -35
+upper_au_d13rep <- -9
+
+xbar_ru_d13rep<- -23
+## 1 SD above and below mean
+lower_ru_d13rep <- -36
+upper_ru_d13rep <- -10
+@
+
+\subsection{Step 2: Compute posterior distributions of the latency factor using ABC rejection sampling}
+
+Figure~\ref{fig:lfvalues} shows the posterior distributions of the latency factor parameter for ungrammatical agreement and reflexive conditions in \textcite{Dillon2013} and \textcite{JaegerMertzenVanDykeVasishth2019}. The estimates for the \textcite{Dillon2013} data-set have wider uncertainty than those for \textcite{JaegerMertzenVanDykeVasishth2019} because the uncertainty of the facilitatory interference effects in the data is relatively large.
+
+<<loaddata,echo=FALSE>>=
+load("../models/au_lf_D13.Rda")
+au_lf_D13<-lf_posterior[-which(lf_posterior==-1)]
+load("../models/ru_lf_D13.Rda")
+ru_lf_D13<-lf_posterior[-which(lf_posterior==-1)]
+load("../models/au_lf_D13rep.Rda")
+au_lf_D13rep<-lf_posterior[-which(lf_posterior==-1)]
+load("../models/ru_lf_D13rep.Rda")
+ru_lf_D13rep<-lf_posterior[-which(lf_posterior==-1)]
+
+condition<-c(rep("agreement",length(au_lf_D13)),
+rep("reflexive",length(ru_lf_D13)),
+rep("agreement",length(au_lf_D13rep)),
+rep("reflexive",length(ru_lf_D13rep)))
+
+expt<-c(rep("Dillon et al, 2013",length(au_lf_D13)),
+rep("Dillon et al, 2013",length(ru_lf_D13)),
+rep("Jäger et al, 2019",length(au_lf_D13rep)),
+rep("Jäger et al, 2019",length(ru_lf_D13rep)))
+
+lf<-c(au_lf_D13,ru_lf_D13,au_lf_D13rep,ru_lf_D13rep)
+
+lf_data<-data.frame(expt=expt,condition=condition,lf=lf)
+
+#round(with(lf_data,tapply(lf,IND=list(expt,condition),mean)),4)
+@
+
+\begin{figure}[!htbp]
+\centering
+<<plotlf,echo=FALSE,fig.width=7,fig.height=5>>=
+ggplot(lf_data,aes(x=lf,y=..density..)) +
+  xlab("latency factor")+
+  geom_histogram(position="identity",binwidth=0.025,fill="gray")+
+  geom_density()+
+  facet_grid(.~expt+condition)+theme_bw()+magnifytext()
+@
+\caption{The posterior distributions of the latency factor parameters for agreement and reflexive conditions using the original Dillon et al., 2013 data (40 participants, 48 items) and our own Jäger et al., 2019 replication data (181 participants, 48 items).}\label{fig:lfvalues}
+\end{figure}
+
+\subsection{Step 3: Generate posterior predicted data}
+
+Having estimated the posterior distributions of the latency factor for the two data-sets in the two conditions (agreement and reflexives), we can now  generate posterior predicted data from the model. We use the posterior distributions of the latency factor to generate the posterior predictive distribution of the interference effect in these experimental conditions.
+These posterior predictive distributions are shown in Figure~\ref{fig:ppmeansvalues}. 
+
+\begin{figure}[!htbp]
+\centering
+<<plotppdistrns,echo=FALSE,fig.width=7,fig.height=5>>=
+load("../models/au_predicted_meansD13.Rda")
+load("../models/ru_predicted_meansD13.Rda")
+load("../models/au_predicted_meansD13rep.Rda")
+load("../models/ru_predicted_meansD13rep.Rda")
+
+ppmeans<-c(au_predicted_means,ru_predicted_means,au_predicted_means_rep,ru_predicted_means_rep)
+
+
+condition<-c(rep("agreement",length(au_predicted_means)),
+             rep("reflexive",length(ru_predicted_means)),
+             rep("agreement",length(au_predicted_means_rep)),
+             rep("reflexive",length(ru_predicted_means_rep)))
+
+expt <- c(rep("Dillon et al., 2013",length(au_predicted_means)),
+          rep("Dillon et al., 2013",length(ru_predicted_means)),
+          rep("Jäger et al, 2019",length(au_predicted_means_rep)),
+          rep("Jäger et al, 2019",length(ru_predicted_means_rep))
+          )
+
+
+ppmeans_df<-data.frame(expt,condition,ppmeans)
+
+ggplot(ppmeans_df,aes(x=ppmeans,y=..density..)) +
+  xlab("Predicted facilitatory interference effect (ms)")+
+  geom_histogram(position="identity",binwidth=10,fill="gray")+
+  geom_density()+
+  facet_grid(.~expt+condition)+theme_bw()+magnifytext()
+@
+\caption{The posterior predictive distributions of the facilitatory interference in ungrammatical agreement and reflexive conditions, derived using the posterior distributions of the latency factor parameter.}\label{fig:ppmeansvalues}
+\end{figure}
+
+The ABC method can be generalized using other, more efficent sampling approaches (e.g., Metropolis-Hastings) to sample the posterior from more than one parameter. The method is computationally expensive but the advantages afforded by taking parameter uncertainty into account in the predictions is very valuable.
+
+\section{Conclusion}
+
+In closing, the ABC method is a powerful tool for parameter estimation in models like the cue-based retrieval model, which cannot be easily expressed as a likelihood. As discussed in \parencite{kangasraasio2019parameter}, this approach should be adopted more widely in psycholinguistics and related areas  because it allows us to take parameter uncertainty into account when evaluating model predictions. This will yield more realistic predictions than using point values for parameters.
+
+\section{Acknowledgements}
+
+The research reported here was partly funded by the Volkswagen Foundation through grant 89 953;  and the Deutsche Forschungsgemeinschaft (German Science Foundation), Collaborative Research Center - SFB 1287, project number 317633480 (\textit{Limits of Variability in Language}) through projects B3 (PIs: Ralf Engbert and Shravan Vasishth) and Q (PIs: Shravan Vasishth and Ralf Engbert). Thanks go to  Garrett Smith for discussions. Thanks also to Brian Dillon for his review of the paper accompanying this Methods paper; the present Methods paper addresses his concerns about parameter estimation.
+
+
+
+\printbibliography
+
+
+\end{document}
+
