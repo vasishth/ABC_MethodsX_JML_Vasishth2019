@@ -121,13 +121,21 @@ means$Effect[2]
 
 The above runs show the expected pattern: low lf values lead to small effects, and large lf values to large effects.
 
+## Focusing on ungrammatical conditions only
 
-## Model predictions for Dillon et al data
+### Model predictions for Dillon et al data
 
 Dillon et al 2013 data (source: Jaeger et al 2019 Bayesian reanalysis):
 
+Grammatical conditions:
+ - Agreement  -34, CrI [-85, 15] ms.  Implies Normal(-34,25) if we take a normal approximation
+ - Reflexives 2, CrI [-57, 60] ms. Implies Normal(2,30) if we take a normal approximation
+
+Ungrammatical conditions:
  - Agreement -60 ms, CrI [-112, -5] ms.  Implies Normal(-60,33) if we take a normal approximation
  - Reflexives -18 ms, CrI [-72, 36] ms. Implies Normal(-18,27) if we take a normal approximation
+
+In this initial section, we focus only on the ungrammatical conditions when estimating the latency factor parameter.
 
 ```{r dillonestimates}
 ## our data from one subject in one pair of conditions (difference in means):
@@ -142,7 +150,7 @@ lower_ru <- -45
 upper_ru <- 9
 ```
 
-### Estimate lf for ungrammatical agreement and reflexive data:
+#### Estimate lf for ungrammatical agreement and reflexive data:
 
 ```{r dillon_au_lf,cache=TRUE}
 ## Rejection sampling:
@@ -191,7 +199,7 @@ hist(lf_posterior[-rejected],main="Ungrammatical conditions \n Dillon et al 2013
      xlab="Latency factor")
 ```
 
-### Estimate predicted range of effects for grammatical and ungrammatical agreement and reflexives using mean lf 
+#### Estimate predicted range of effects for grammatical and ungrammatical agreement and reflexives using mean lf 
 
 ```{r cache=TRUE}
 ## just computed above:
@@ -227,7 +235,7 @@ summary(g_predicted_means)
 summary(u_predicted_means)
 ```
 
-## Model predictions for Jäger et al 2019 replication data
+### Model predictions for Jäger et al 2019 replication data
 
 Next, we turn to our replication data: 
 
@@ -247,7 +255,7 @@ lower_rurep <- -36
 upper_rurep <- -10
 ```
 
-### Estimate lf for ungrammatical agreement data (replication)
+#### Estimate lf for ungrammatical agreement data (replication)
 
 ```{r dillonrep_u_lf,cache=TRUE}
 ## Rejection sampling:
@@ -290,7 +298,7 @@ Visualize posterior of lf:
 hist(lf_posterior[-rejected],main="Ungrammatical conditions \n (replication)",xlab="Latency factor")
 ```
 
-### Estimate predicted range of effects for ungrammatical agreement data using mean lf  (replication data)
+#### Estimate predicted range of effects for ungrammatical agreement data using mean lf  (replication data)
 
 
 ```{r cache=TRUE}
@@ -320,166 +328,136 @@ summary(g_predicted_means_rep)
 summary(u_predicted_means_rep)
 ```
 
-# Validating the ABC method on gold standard (known lf) values
+## Focusing on grammatical and ungrammatical conditions
 
-The estimates of lf for the Dillon et al ungrammatical agreement and reflexives conditions are computed above. Using the Dillon et al data, we first computed the means of the posteriors of the latency factor from the two comparisons (reflexives and agreement). Then we check if the ABC algorithm recovers the true lf value used to generate the predictions from the model.
+### Model predictions for Dillon et al data
 
-# Estimates of the interference effect based on the posterior distributions of the latency factor
-  
-```{r}
-## this is the posterior distribution of lf based on the Dillon reflexive data:
-load("RdaFilesVague/ru_lf_D13.Rda")
-## extract mean and lower and upper 95% credible interval bounds:
-mean_ru_lf_D13<-mean(lf_posterior[-which(lf_posterior==-1)])
-lower_ru_lf_D13<-quantile(lf_posterior[-which(lf_posterior==-1)],prob=0.025)
-upper_ru_lf_D13<-quantile(lf_posterior[-which(lf_posterior==-1)],prob=0.975)
-## fit three models, but we will use only the model based on means:
-means <- iterate_lf(mean_ru_lf_D13)
-lower <- iterate_lf(lower_ru_lf_D13)
-upper <- iterate_lf(upper_ru_lf_D13)
-ru_lf_est_D13<-c(lower$Effect[2],
-                 means$Effect[2],
-                 upper$Effect[2])
-```  
+Dillon et al 2013 data (source: Jaeger et al 2019 Bayesian reanalysis):
 
-### Reflexive effect: Estimating lf
+Grammatical conditions:
+ - Agreement  -34, CrI [-85, 15] ms.  Implies Normal(-34,25) if we take a normal approximation
+ - Reflexives 2, CrI [-57, 60] ms. Implies Normal(2,30) if we take a normal approximation
 
-First we use the small reflexives estimate as our effect to recover the lf parameter estimate.
+Ungrammatical conditions:
+ - Agreement -60 ms, CrI [-112, -5] ms.  Implies Normal(-60,33) if we take a normal approximation
+ - Reflexives -18 ms, CrI [-72, 36] ms. Implies Normal(-18,27) if we take a normal approximation
 
-```{r}
+```{r dillonestimates2}
 ## our data from one subject in one pair of conditions (difference in means):
-xbar<-ru_lf_est_D13[2]
-## distance in SE units of upper bound from mean
-abs(ru_lf_est_D13[3]-ru_lf_est_D13[1])/2
-## lower bound distance:
-abs(ru_lf_est_D13[2]-ru_lf_est_D13[1])/2
-## take the bigger value
-se<-abs(ru_lf_est_D13[3]-ru_lf_est_D13[1])/2
-## set acceptable bounds of generated effect:
-lower_bound <- xbar-se
-upper_bound <- xbar+se
+
+## grammatical:
+xbar_ag <- -34
+lower_ag <- -34-25
+upper_ag <-  -34+25
+
+xbar_rg <- 2
+lower_rg <- 2-30
+upper_rg <-  2+30
+
+## ungrammatical:
+xbar_au<- -60
+## 1 SD above and below mean
+lower_au <- -93
+upper_au <- -27
+
+xbar_ru<- -18
+## 1 SD above and below mean
+lower_ru <- -45
+upper_ru <- 9
 ```
 
-Now, we check whether the algorithm can recover the true value of lf that generated the data. 
+#### Estimate lf for grammatical and ungrammatical agreement and reflexive data:
 
-The true mean of lf here was ```{r round(mean_ru_lf_D13,4)}```.
+Will not work because there is no way the model can predict negative effects for grammatical cases, and that  is what Dillon et al found.
 
-
-```{r goldstandard_refl,cache=TRUE}
+```{r dillon_a_lf,eval=FALSE,cache=TRUE}
 ## Rejection sampling:
 nsamp<-5000
-lf_posterior_au<-rep(NA,nsamp)
+lf_posterior<-rep(NA,nsamp)
 for(i in 1:nsamp){
-  ## generate random latency factor value each time:
+  ## generate latency factor value from prior
   latency_factor <<- rbeta(1,a,b) 
-## get generated effect:   
-generated_effect<-iterate_lf(latency_factor)$Effect[2]
+## get generated effect for ungrammatical conditions:   
+ generated_effect_g<-iterate_lf(latency_factor)$Effect[1]
+ ## get generated effect for ungrammatical conditions:   
+ generated_effect_u<-iterate_lf(latency_factor)$Effect[2]
+
 if(printcounts){
 print(paste("count: ",i,sep=" "))
-print(paste(lower_bound,generated_effect,upper_bound,sep=" "))
+print(paste(lower,generated_effect,upper,sep=" "))
 }
   ## if generated effect is within bounds, accept
-if(generated_effect>=lower_bound & generated_effect<=upper_bound){
-  if(printcounts){print("accept")}
+if((generated_effect_u>=lower_au & 
+    generated_effect_u<=upper_au) &
+   (generated_effect_u>=lower_ru & generated_effect_u<=upper_ru) & 
+   (generated_effect_g>=lower_ag & 
+    generated_effect_g<=upper_ag) &
+   (generated_effect_g>=lower_rg & generated_effect_g<=upper_rg)
+   )
+  {
   lf_posterior[i]<-latency_factor
 } else {
   ## reject
-  if(printcounts){print("reject")}
   lf_posterior[i]<- -1
   } 
 }
 
+## which samples were rejected?
 rejected<-which(lf_posterior==-1)
+## acceptance rate:
 length(lf_posterior[-rejected])/nsamp
 
 quantile(lf_posterior[-rejected],probs=c(0.025,0.975))
 mean(lf_posterior[-rejected])
 ```
 
-Visualize posterior of lf:
+Save the results (if needed):
 
-```{r}
-## posterior:
-hist(lf_posterior[-rejected])
-abline(v=mean_ru_lf_D13)
-```
-
-The true value is within the 95% credible interval.
-
-## Agreement effect: Estimating lf
-
-```{r}
-load("RdaFilesVague/au_lf_D13.Rda")
-mean_au_lf_D13<-mean(lf_posterior[-which(lf_posterior==-1)])
-lower_au_lf_D13<-quantile(lf_posterior[-which(lf_posterior==-1)],prob=0.025)
-upper_au_lf_D13<-quantile(lf_posterior[-which(lf_posterior==-1)],prob=0.975)
-means <- iterate_lf(mean_au_lf_D13)
-lower <- iterate_lf(lower_au_lf_D13)
-upper <- iterate_lf(upper_au_lf_D13)
-au_lf_est_D13<-c(lower$Effect[2],
-                 means$Effect[2],
-                 upper$Effect[2])
-```
-
-```{r}
-## our data from one subject in one pair of conditions (difference in means):
-xbar<-au_lf_est_D13[1]
-## distance in SE units of upper bound from mean
-abs(au_lf_est_D13[3]-au_lf_est_D13[1])/2
-## lower bound distance:
-abs(au_lf_est_D13[2]-au_lf_est_D13[1])/2
-## take the bigger value
-se<-abs(au_lf_est_D13[3]-au_lf_est_D13[1])/2
-## set acceptable bounds of generated effect:
-lower_bound <- xbar-se
-upper_bound <- xbar+se
-```
-
-
-Now, we check whether the algorithm can recover the true value of lf that generated the data. 
-
-The true mean of lf here was ```{r round(mean_au_lf_D13,4)}```.
-
-
-```{r goldstandard_agrmt,cache=TRUE}
-## Rejection sampling:
-nsamp<-5000
-lf_posterior_au<-rep(NA,nsamp)
-for(i in 1:nsamp){
-  ## generate random latency factor value each time:
-  latency_factor <<- rbeta(1,a,b) 
-## get generated effect:   
-generated_effect<-iterate_lf(latency_factor)$Effect[2]
-if(printcounts){
-print(paste("count: ",i,sep=" "))
-print(paste(lower_bound,generated_effect,upper_bound,sep=" "))
-}
-  ## if generated effect is within bounds, accept
-if(generated_effect>=lower_bound & generated_effect<=upper_bound){
-  if(printcounts){print("accept")}
-  lf_posterior[i]<-latency_factor
-} else {
-  ## reject
-  if(printcounts){print("reject")}
-  lf_posterior[i]<- -1
-  } 
-}
-
-rejected<-which(lf_posterior==-1)
-length(lf_posterior[-rejected])/nsamp
-
-quantile(lf_posterior[-rejected],probs=c(0.025,0.975))
-mean(lf_posterior[-rejected])
+```{r eval=FALSE}
+## LF parameter's posterior distribution based on 
+## ungrammatical agrmt and refl conditions, based on Dillon data
+save(lf_posterior,file="RdaFilesVague/lf_D13.Rda")
 ```
 
 Visualize posterior of lf:
 
-```{r}
-## posterior:
-hist(lf_posterior[-rejected])
-abline(v=mean_au_lf_D13)
+```{r eval=FALSE}
+hist(lf_posterior[-rejected],main="Dillon et al 2013",
+     xlab="Latency factor")
 ```
 
-The true lf value lies within the 95% credible interval of the posterior distribution. 
+#### Estimate predicted range of effects for grammatical and ungrammatical agreement and reflexives using mean lf 
 
-This shows that the ABC approach can in principle generate a posterior distribution of the lf parameter that contains the true value.
+```{r cache=TRUE,eval=FALSE}
+## just computed above:
+load("RdaFilesVague/u_lf_D13.Rda")
+
+lf_posterior_accepted<-lf_posterior[-which(lf_posterior==-1)]
+
+n<-length(lf_posterior_accepted)
+
+g_predicted_means<-rep(NA,n)
+u_predicted_means<-rep(NA,n)
+
+for(i in 1:n){
+  predictions<-iterate_lf(values=lf_posterior_accepted[i])
+  ## grammatical:
+  g_predicted_means[i]<-predictions$Effect[1]
+  ## ungrammatical:
+  u_predicted_means[i]<-predictions$Effect[2]
+}
+```
+
+Save results:
+
+```{r eval=FALSE}
+save(g_predicted_means,file="RdaFilesVague/g_predicted_means_D13.Rda")
+save(u_predicted_means,file="RdaFilesVague/u_predicted_meansD13.Rda")
+```
+
+Summary of predicted RTs:
+
+```{r eval=FALSE}
+summary(g_predicted_means)
+summary(u_predicted_means)
+```
